@@ -12,19 +12,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const apiKey = process.env.OPENROUTER_API_KEY?.trim();
-    const baseUrl = process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1';
+    // Use Gemini API Key provided by user
+    // Recommendation: Set this as GEMINI_API_KEY in Vercel Environment Variables
+    const apiKey = process.env.GEMINI_API_KEY || 'AIzaSyBU-fGc-MYuKudiAf8uD2AiQKWEQ6Tpeh4';
+    const baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'OpenRouter API key is not configured' },
-        { status: 500 }
-      );
-    }
-
-    const visionModel = 'google/gemma-3-4b-it:free';
-    console.log(`Processing image upload. Base64 length: ${body.imageUrl.length}`);
-    console.log(`API Key configured: ${apiKey ? 'Yes' : 'No'} (Length: ${apiKey?.length || 0})`);
+    console.log(`Processing image upload with Gemini. Base64 length: ${body.imageUrl.length}`);
 
     const visionPrompt = `Analyze this image and provide a detailed description in the following JSON format:
 
@@ -40,50 +33,62 @@ export async function POST(request: NextRequest) {
 
 Be extremely detailed and specific. Include lighting, perspective, quality, and any other relevant visual details. If no text is visible, set text_content to null. If no specific emotions are apparent, use empty array. Analyze every aspect of the image thoroughly.`;
 
-    console.log(`Using vision model: ${visionModel}`);
+    // Process base64 image data
+    let mimeType = 'image/jpeg';
+    let base64Data = body.imageUrl;
+
+    if (body.imageUrl.startsWith('data:')) {
+      const match = body.imageUrl.match(/^data:([^;]+);base64,(.+)$/);
+      if (match) {
+        mimeType = match[1];
+        base64Data = match[2];
+      }
+    }
 
     const visionRequest = {
-      model: visionModel,
-      messages: [
+      contents: [
         {
-          role: 'user',
-          content: [
-            { type: 'text', text: visionPrompt },
-            { type: 'image_url', image_url: { url: body.imageUrl } }
+          parts: [
+            { text: visionPrompt },
+            {
+              inline_data: {
+                mime_type: mimeType,
+                data: base64Data
+              }
+            }
           ]
         }
       ],
-      temperature: 0.1,
-      max_tokens: 1500
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 2000,
+        responseMimeType: "application/json"
+      }
     };
 
-    const response = await fetch(`${baseUrl}/chat/completions`, {
+    const response = await fetch(`${baseUrl}?key=${apiKey}`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
-        'X-Title': 'Kacung',
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify(visionRequest),
     });
 
     if (!response.ok) {
       const errorData = await response.text();
-      const lastError = `Model ${visionModel}: ${response.status} ${errorData}`;
-      console.error('Vision model failed:', lastError);
+      console.error('Gemini vision model failed:', response.status, errorData);
       return NextResponse.json(
-        { error: `Vision model failed. Error: ${lastError}` },
+        { error: `Gemini vision model failed with status ${response.status}` },
         { status: 500 }
       );
     }
 
-    const visionResponse = await response.json();
-    const description = visionResponse.choices[0]?.message?.content;
+    const visionResult = await response.json();
+    const description = visionResult.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!description) {
       return NextResponse.json(
-        { error: 'Failed to get image description' },
+        { error: 'Failed to get image description from Gemini' },
         { status: 500 }
       );
     }
@@ -93,14 +98,13 @@ Be extremely detailed and specific. Include lighting, perspective, quality, and 
       const parsedDescription: ImageDescriptionResponse = JSON.parse(description);
       return NextResponse.json({ description: parsedDescription });
     } catch (parseError) {
-      // Fallback jika response bukan JSON valid - buat struktur JSON manual
-      console.log('Vision model response:', description);
+      console.log('Gemini model non-JSON response:', description);
 
       const fallbackDescription: ImageDescriptionResponse = {
         description: description,
         objects: [],
         colors: [],
-        context: 'Image description from vision model'
+        context: 'Image description from Gemini'
       };
 
       return NextResponse.json({ description: fallbackDescription });
