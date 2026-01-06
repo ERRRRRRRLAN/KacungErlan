@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const apiKey = process.env.OPENROUTER_API_KEY;
+    const apiKey = process.env.OPENROUTER_API_KEY?.trim();
     const baseUrl = process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1';
 
     if (!apiKey) {

@@ -15,8 +15,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Get environment variables
-    const apiKey = process.env.OPENROUTER_API_KEY;
+    const apiKey = process.env.OPENROUTER_API_KEY?.trim();
     const baseUrl = process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1';
+
+    console.log(`Chat Request received. API Key configured: ${apiKey ? 'Yes' : 'No'} (Length: ${apiKey?.length || 0})`);
+    if (apiKey) {
+      console.log(`API Key prefix: ${apiKey.substring(0, 10)}...`);
+    }
 
     if (!apiKey) {
       return NextResponse.json(
