@@ -34,6 +34,9 @@ export async function POST(request: NextRequest) {
 
     console.log(`Processing image upload. Base64 length: ${body.imageUrl.length}`);
     console.log(`API Key configured: ${apiKey ? 'Yes' : 'No'} (Length: ${apiKey?.length || 0})`);
+    if (apiKey) {
+      console.log(`API Key prefix: ${apiKey.substring(0, 7)}...`);
+    }
 
     const visionPrompt = `Analyze this image and provide a detailed description in the following JSON format:
 
