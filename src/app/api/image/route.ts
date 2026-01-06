@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     // Use Gemini API Key provided by user
     // Recommendation: Set this as GEMINI_API_KEY in Vercel Environment Variables
     const apiKey = process.env.GEMINI_API_KEY || 'AIzaSyBU-fGc-MYuKudiAf8uD2AiQKWEQ6Tpeh4';
-    const baseUrl = 'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent';
+    const baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
     console.log(`Processing image upload with Gemini. Base64 length: ${body.imageUrl.length}`);
 
