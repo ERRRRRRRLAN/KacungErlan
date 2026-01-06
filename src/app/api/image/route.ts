@@ -23,7 +23,8 @@ export async function POST(request: NextRequest) {
     }
 
     const visionModels = [
-      'nvidia/nemotron-nano-12b-v2-vl:free', // Prioritized as requested
+      'google/gemma-3-4b-it:free',           // Prioritized as requested
+      'nvidia/nemotron-nano-12b-v2-vl:free',
       'google/gemini-2.0-flash-exp:free',
       'google/gemma-3-27b-it:free',
       'qwen/qwen2.5-vl-72b-instruct:free',
