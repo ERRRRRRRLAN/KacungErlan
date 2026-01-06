@@ -22,15 +22,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const visionModels = [
-      'google/gemma-3-4b-it:free',           // Prioritized as requested
-      'nvidia/nemotron-nano-12b-v2-vl:free',
-      'google/gemini-2.0-flash-exp:free',
-      'google/gemma-3-27b-it:free',
-      'qwen/qwen2.5-vl-72b-instruct:free',
-      'moonshotai/kimi-vl-a3b-thinking:free',
-    ];
-
+    const visionModel = 'google/gemma-3-4b-it:free';
     console.log(`Processing image upload. Base64 length: ${body.imageUrl.length}`);
     console.log(`API Key configured: ${apiKey ? 'Yes' : 'No'} (Length: ${apiKey?.length || 0})`);
 
@@ -48,66 +40,45 @@ export async function POST(request: NextRequest) {
 
 Be extremely detailed and specific. Include lighting, perspective, quality, and any other relevant visual details. If no text is visible, set text_content to null. If no specific emotions are apparent, use empty array. Analyze every aspect of the image thoroughly.`;
 
-    let visionModel = visionModels[0]; // Default to first option
-    let lastError = '';
-    let finalResponse: Response | null = null;
+    console.log(`Using vision model: ${visionModel}`);
 
-    // Try each Nvidia vision model until one works
-    for (const model of visionModels) {
-      try {
-        console.log(`Trying Nvidia vision model: ${model}`);
-
-        const visionRequest = {
-          model: model,
-          messages: [
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: visionPrompt },
-                { type: 'image_url', image_url: { url: body.imageUrl } }
-              ]
-            }
-          ],
-          temperature: 0.1, // Low temperature for consistent descriptions
-          max_tokens: 1500
-        };
-
-        const response = await fetch(`${baseUrl}/chat/completions`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`,
-            'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
-            'X-Title': 'AI Image Processor',
-          },
-          body: JSON.stringify(visionRequest),
-        });
-
-        if (response.ok) {
-          finalResponse = response;
-          console.log(`Nvidia vision model ${model} worked successfully`);
-          visionModel = model;
-          break; // Found a working model
-        } else {
-          const errorData = await response.text();
-          lastError = `Model ${model}: ${response.status} ${errorData}`;
-          console.warn(`Nvidia vision model ${model} failed:`, lastError);
+    const visionRequest = {
+      model: visionModel,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: visionPrompt },
+            { type: 'image_url', image_url: { url: body.imageUrl } }
+          ]
         }
-      } catch (error) {
-        lastError = `Model ${model}: ${error instanceof Error ? error.message : 'Unknown error'}`;
-        console.warn(`Nvidia vision model ${model} failed:`, lastError);
-      }
-    }
+      ],
+      temperature: 0.1,
+      max_tokens: 1500
+    };
 
-    if (!finalResponse || !finalResponse.ok) {
-      console.error('All Nvidia vision models failed. Last error:', lastError);
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+        'X-Title': 'Kacung',
+      },
+      body: JSON.stringify(visionRequest),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      const lastError = `Model ${visionModel}: ${response.status} ${errorData}`;
+      console.error('Vision model failed:', lastError);
       return NextResponse.json(
-        { error: `All Nvidia vision models failed. Last error: ${lastError}` },
+        { error: `Vision model failed. Error: ${lastError}` },
         { status: 500 }
       );
     }
 
-    const visionResponse = await finalResponse.json();
+    const visionResponse = await response.json();
     const description = visionResponse.choices[0]?.message?.content;
 
     if (!description) {
