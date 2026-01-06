@@ -61,8 +61,7 @@ Be extremely detailed and specific. Include lighting, perspective, quality, and 
       ],
       generationConfig: {
         temperature: 0.1,
-        maxOutputTokens: 2000,
-        responseMimeType: "application/json"
+        max_output_tokens: 2000
       }
     };
 
