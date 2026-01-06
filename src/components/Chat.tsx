@@ -618,7 +618,7 @@ ${conversationText}`;
   return (
     <div className={`flex flex-col h-full w-full bg-gradient-to-br from-blue-50 via-white to-indigo-50 ${className}`}>
       {/* Header */}
-      <div className="backdrop-blur-md bg-white/80 border-b border-white/20 px-3 sm:px-6 py-3 shadow-lg flex-shrink-0">
+      <div className="backdrop-blur-md bg-white/80 border-b border-white/20 px-3 sm:px-6 py-3 shadow-lg flex-shrink-0 relative z-[60]">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2 sm:space-x-4">
             <div className="relative">
