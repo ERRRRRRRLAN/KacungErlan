@@ -49,6 +49,10 @@ export default function Chat({ className = '' }: ChatProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const imageQueueRef = useRef<{ id: string; file: File }[]>([]);
+  const isProcessingQueueRef = useRef<boolean>(false);
+
+  const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
   // Context window tracking (approximate) - adjusted for testing mode
   const MAX_CONTEXT_TOKENS = isTestingMode ? 15000 : 262144; // 15K for testing, 262K for production
@@ -388,89 +392,121 @@ export default function Chat({ className = '' }: ChatProps) {
       url: '', // Placeholder until we get base64
       isUploading: true,
       progress: 0,
-      status: 'Starting...'
+      status: 'Queued...'
     };
 
     setUploadedImages(prev => [...prev, initialImageData]);
 
-    const updateImage = (updates: Partial<ImageData>) => {
-      setUploadedImages(prev => prev.map(img =>
-        img.id === imageId ? { ...img, ...updates } : img
-      ));
-    };
+    // Add to queue and trigger processing
+    imageQueueRef.current.push({ id: imageId, file });
+    processImageQueue();
+  };
 
-    try {
-      // Progress: Converting file (15%)
-      updateImage({ progress: 15, status: 'Converting...' });
+  // Queue worker
+  const processImageQueue = async () => {
+    if (isProcessingQueueRef.current || imageQueueRef.current.length === 0) return;
 
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          updateImage({ progress: 30, status: 'Processing data...', url: reader.result as string });
-          resolve(reader.result as string);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+    isProcessingQueueRef.current = true;
 
-      // Progress: Sending to vision API (40%)
-      updateImage({ progress: 40, status: 'Analyzing Image...' });
+    while (imageQueueRef.current.length > 0) {
+      const { id: imageId, file } = imageQueueRef.current[0];
 
-      // Simulated crawl (40% to 80%)
-      const progressInterval = setInterval(() => {
-        setUploadedImages(prev => prev.map(img => {
-          if (img.id === imageId && img.progress !== undefined && img.progress < 80) {
-            return { ...img, progress: img.progress + 1 };
+      const updateImage = (updates: Partial<ImageData>) => {
+        setUploadedImages(prev => prev.map(img =>
+          img.id === imageId ? { ...img, ...updates } : img
+        ));
+      };
+
+      let success = false;
+      let retries = 0;
+      const maxRetries = 3;
+
+      while (!success && retries <= maxRetries) {
+        try {
+          // Progress: Converting file (15%)
+          updateImage({ progress: 15, status: retries > 0 ? `Retrying... (${retries}/${maxRetries})` : 'Converting...' });
+
+          const base64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              updateImage({ progress: 30, status: 'Processing data...', url: reader.result as string });
+              resolve(reader.result as string);
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+
+          // Progress: Sending to vision API (40%)
+          updateImage({ progress: 40, status: 'Analyzing...' });
+
+          const processResponse = await fetch('/api/image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              imageUrl: base64,
+              userPrompt: input.trim()
+            }),
+          });
+
+          if (processResponse.status === 429) {
+            const errorData = await processResponse.json().catch(() => ({}));
+            // Try to extract wait time from message (Gemini format: "Please retry in 4.777162021s.")
+            const waitMatch = errorData.error?.match(/retry in ([\d.]+)\s*s/i);
+            const waitSeconds = waitMatch ? parseFloat(waitMatch[1]) : Math.pow(2, retries) * 2;
+
+            updateImage({
+              status: `Rate limited. Waiting ${Math.ceil(waitSeconds)}s...`,
+              progress: 40
+            });
+
+            await sleep(waitSeconds * 1000 + 500); // Buffer 500ms
+            retries++;
+            continue;
           }
-          return img;
-        }));
-      }, 300);
 
-      const processResponse = await fetch('/api/image', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          imageUrl: base64,
-          userPrompt: input.trim()
-        }),
-      });
+          if (!processResponse.ok) {
+            const errorData = await processResponse.json().catch(() => ({}));
+            throw new Error(errorData.error || `Server error: ${processResponse.status}`);
+          }
 
-      clearInterval(progressInterval);
+          updateImage({ progress: 90, status: 'Finalizing...' });
+          const processData = await processResponse.json();
+          const imageDescription: ImageDescriptionResponse = processData.description;
 
-      if (!processResponse.ok) {
-        const errorData = await processResponse.json().catch(() => ({}));
-        const errorMsg = errorData.error || `Server error: ${processResponse.status}`;
-        throw new Error(errorMsg);
+          updateImage({
+            progress: 100,
+            status: 'Complete',
+            description: JSON.stringify(imageDescription),
+            processed: true,
+            isUploading: false
+          });
+
+          setTimeout(() => {
+            updateImage({ progress: undefined, status: undefined });
+          }, 2000);
+
+          success = true;
+        } catch (err) {
+          if (retries < maxRetries) {
+            retries++;
+            const backoff = Math.pow(2, retries) * 1000;
+            updateImage({ status: `Error. Retrying in ${backoff / 1000}s...` });
+            await sleep(backoff);
+          } else {
+            const errorMessage = err instanceof Error ? err.message : 'Failed to process image';
+            updateImage({ status: 'Failed', isUploading: false, progress: 0 });
+            setError(errorMessage);
+            console.error('Image upload error:', err);
+            success = true; // Break the retry loop but it's an actual failure
+          }
+        }
       }
 
-      // Progress: Processing response (90%)
-      updateImage({ progress: 90, status: 'Finalizing...' });
-      const processData = await processResponse.json();
-      const imageDescription: ImageDescriptionResponse = processData.description;
-
-      // Progress: Finalizing (100%)
-      updateImage({
-        progress: 100,
-        status: 'Complete',
-        description: JSON.stringify(imageDescription),
-        processed: true,
-        isUploading: false
-      });
-
-      // Reset progress feedback after a short delay (keep description and url)
-      setTimeout(() => {
-        updateImage({ progress: undefined, status: undefined });
-      }, 2000);
-
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to process image';
-      setError(errorMessage);
-      console.error('Image upload error:', err);
-      // Remove the image if it failed
-      setUploadedImages(prev => prev.filter(img => img.id !== imageId));
+      // Remove from queue
+      imageQueueRef.current.shift();
     }
+
+    isProcessingQueueRef.current = false;
   };
 
   // Remove image handler

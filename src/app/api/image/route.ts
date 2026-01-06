@@ -74,10 +74,18 @@ Be extremely detailed and specific. Include lighting, perspective, quality, and 
     });
 
     if (!response.ok) {
-      const errorData = await response.text();
+      const errorData = await response.json().catch(() => ({ error: { message: 'Unknown error' } }));
       console.error('Gemini vision model failed:', response.status, errorData);
+
+      if (response.status === 429) {
+        return NextResponse.json(
+          { error: errorData.error?.message || 'Rate limit exceeded' },
+          { status: 429 }
+        );
+      }
+
       return NextResponse.json(
-        { error: `Gemini vision model failed with status ${response.status}` },
+        { error: `Gemini vision model failed with status ${response.status}: ${errorData.error?.message || ''}` },
         { status: 500 }
       );
     }
