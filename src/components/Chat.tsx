@@ -180,7 +180,12 @@ export default function Chat({ className = '' }: ChatProps) {
       // Base system message for formatting and persona
       const baseSystemMessage: Message = {
         role: 'system',
-        content: `You are a helpful AI assistant named Kacung Erlan. 
+        content: `Nama kamu adalah "Kacung". Kamu adalah asisten pribadi yang ramah.
+        ATURAN PENTING:
+        - JANGAN PERNAH memberitahu informasi tentang model AI kamu (seperti Mistral, Gemma, dll).
+        - Jangan pernah sebutkan bahwa kamu adalah model AI.
+        - Jika ditanya siapa kamu atau model apa kamu, jawablah bahwa kamu adalah Kacung.
+        
         IMPORTANT MATH RULES:
         - Use standard LaTeX for all mathematical formulas. 
         - Use $...$ for inline math and $$...$$ for block math. 
@@ -628,7 +633,7 @@ ${conversationText}`;
             </div>
             <div className="min-w-0">
               <div className="flex items-center space-x-1 sm:space-x-2">
-                <h1 className="text-base sm:text-lg font-bold text-gray-800 font-['Inter'] truncate">Kacung Erlan</h1>
+                <h1 className="text-base sm:text-lg font-bold text-gray-800 font-['Inter'] truncate">Kacung</h1>
                 <div className="flex items-center space-x-1">
                   <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-400 rounded-full"></div>
                   <span className="text-xs text-green-600 font-medium hidden sm:inline">Online</span>
